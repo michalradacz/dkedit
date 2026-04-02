@@ -566,6 +566,7 @@ function showBulkPj(slId){
     <button onclick="bulkPjEli('${slId}')">Přidat legislativní ustanovení</button>
     <button onclick="bulkPjNleg('${slId}')">Přidat nelegislativní zdroj</button>
     <button onclick="bulkPjNote('${slId}')">Přidat autorskou poznámku</button>
+    <button onclick="bulkPjDel('${slId}')" style="background:rgba(220,50,50,.35)">Smazat vybrané</button>
     <button class="bcc" onclick="document.getElementById('bulk-pj-bar').style.display='none'">✕ Zavřít</button>
   </div>`;
 }
@@ -759,7 +760,23 @@ function pjForm(p,s,isEd){
         ${all.map(a=>`<option value="${e(a.iri||a.id)}" ${(p.nad||[]).includes(a.iri||a.id)?'selected':''}>${a._ext?'['+e(a._sn)+'] ':''} [${tLbl(a.typ)}] ${e(a.nc||a.id)}${!a.iri?' ⚠ bez IRI':''}</option>`).join('')}
       </select>
     </div>
-    <div class="fg"><label>Ekvivalentní pojmy (IRI)</label>${iriW('ek',p.ekv||[])}</div>
+    <div class="fg"><label>Ekvivalentní pojmy</label>
+      <div id="ekv-list" style="margin-bottom:7px">
+        ${(p.ekv||[]).map((v,i)=>`<div class="ir" style="margin-bottom:4px">
+          <span style="flex:1;font-size:13px;padding:5px 4px;color:var(--tx2)" title="${e(v)}">${e(all.find(a=>(a.iri||a.id)===v)?.nc||v)}</span>
+          <button type="button" class="bd sm" onclick="rmEkv(${i})" aria-label="Odebrat">&#x2715;</button>
+        </div>`).join('')}
+      </div>
+      <div class="ir">
+        <select id="ekv-sel" aria-label="Vybrat ekvivalentní pojem ze projektu">
+          <option value="">— vybrat z projektu —</option>
+          ${all.map(a=>`<option value="${e(a.iri||a.id)}">${a._ext?'['+e(a._sn)+'] ':''} [${tLbl(a.typ)}] ${e(a.nc||a.id)}${!a.iri?' ⚠ bez IRI':''}</option>`).join('')}
+        </select>
+        <input type="url" id="ekv-iri-inp" placeholder="nebo zadejte IRI ručně…" style="flex:2">
+        <button type="button" class="bs sm" onclick="addEkv()">Přidat</button>
+      </div>
+      <input type="hidden" id="irh-ek" name="ek" value="${e(JSON.stringify(p.ekv||[]))}">
+    </div>
     ${typSp(p,s,all)}
   </fieldset>
   <fieldset><legend>Klasifikace údajů</legend>
@@ -1525,6 +1542,7 @@ function eliDialog(targetInputId){
   document.getElementById('dlg-f').innerHTML=`
     <button class="bp" onclick="eliInsert('${targetInputId}')">Vložit IRI</button>
     <button class="bs" onclick="cDlg()">Zrušit</button>`;
+  d.removeAttribute('inert');d.removeAttribute('aria-hidden');
   d.showModal();
   // Live preview
   ['eli-rok','eli-cislo','eli-datum','eli-cast','eli-par','eli-odst','eli-pism','eli-bod'].forEach(id=>{
@@ -1866,6 +1884,8 @@ function showBulkPl(csId){
     <button onclick="bulkPlStav('${csId}')">Změnit stav</button>
     <button onclick="bulkPlPlatnost('${csId}')">Nastavit platnost</button>
     <button onclick="bulkPlNote('${csId}')">Přidat poznámku</button>
+    <button onclick="bulkPlEli('${csId}')">Přidat leg. ustanovení</button>
+    <button onclick="bulkPlDel('${csId}')" style="background:rgba(220,50,50,.35)">Smazat vybrané</button>
     <button class="bcc" onclick="document.getElementById('bulk-pl-bar').style.display='none'">✕</button>
   </div>`;
 }
@@ -2902,6 +2922,100 @@ function eliToOFN(rok,cislo,datum,rest){
   iri+='/dokument/norma';
   if(rest)iri+=rest;
   return iri;
+}
+
+function addEkv(){
+  const sel=document.getElementById('ekv-sel');
+  const inp=document.getElementById('ekv-iri-inp');
+  const val=(sel&&sel.value)||( inp&&inp.value.trim())||'';
+  if(!val)return;
+  const h=document.getElementById('irh-ek');
+  if(!h)return;
+  const l=JSON.parse(h.value||'[]');
+  if(l.includes(val)){toast('Tento pojem již je v seznamu.','w');return;}
+  l.push(val);
+  h.value=JSON.stringify(l);
+  if(sel)sel.value='';
+  if(inp)inp.value='';
+  // Re-render the list
+  const list=document.getElementById('ekv-list');
+  if(list){
+    const all=allPj(getASl()?.id||'',null);
+    list.innerHTML=l.map((v,i)=>'<div class="ir" style="margin-bottom:4px">'
+      +'<span style="flex:1;font-size:13px;padding:5px 4px;color:var(--tx2)" title="'+e(v)+'">'
+      +e((all.find(a=>(a.iri||a.id)===v)||{}).nc||v)+'</span>'
+      +'<button type="button" class="bd sm" onclick="rmEkv('+i+')" aria-label="Odebrat">&#x2715;</button>'
+      +'</div>').join('');
+  }
+}
+function rmEkv(idx){
+  const h=document.getElementById('irh-ek');if(!h)return;
+  const l=JSON.parse(h.value||'[]');l.splice(idx,1);h.value=JSON.stringify(l);
+  const list=document.getElementById('ekv-list');
+  if(list){
+    const all=allPj(getASl()?.id||'',null);
+    list.innerHTML=l.map((v,i)=>'<div class="ir" style="margin-bottom:4px">'
+      +'<span style="flex:1;font-size:13px;padding:5px 4px;color:var(--tx2)" title="'+e(v)+'">'
+      +e((all.find(a=>(a.iri||a.id)===v)||{}).nc||v)+'</span>'
+      +'<button type="button" class="bd sm" onclick="rmEkv('+i+')" aria-label="Odebrat">&#x2715;</button>'
+      +'</div>').join('');
+  }
+}
+
+function bulkPjDel(slId){
+  const ids=getSelPjIds(slId);if(!ids.length)return;
+  oDlg('Smazat vybrané pojmy',
+    `<p>Smazat <strong>${ids.length}</strong> vybraných pojmů?</p><p class="xs" style="color:var(--dg);margin-top:7px">Tato akce je nevratná.</p>`,
+    `<button class="bd" onclick="doBulkPjDel('${slId}')">Ano, smazat</button><button class="bs" onclick="cDlg()">Zrušit</button>`);
+}
+function doBulkPjDel(slId){
+  const s=getSl(slId);if(!s)return;
+  const ids=getSelPjIds(slId);
+  s.pojmy=s.pojmy.filter(p=>!ids.includes(p.id));
+  s.aktualizovano=td();saveL();cDlg();
+  toast('Smazáno '+ids.length+' pojmů.');render();
+}
+
+function bulkPlEli(csId){
+  const ids=getSelPlIds(csId);if(!ids.length)return;
+  oDlg('Přidat legislativní ustanovení',
+    `<div class="fg"><label>Číslo a rok předpisu</label>
+      <div class="ir">
+        <input type="number" id="bulk-pl-eli-cis" placeholder="Číslo" min="1">
+        <input type="number" id="bulk-pl-eli-rok" placeholder="Rok" min="1918" max="2099" style="width:90px;flex:none">
+      </div>
+    </div>
+    <p class="xs" style="margin-top:8px">Bude přidáno k ${ids.length} položkám.</p>`,
+    `<button class="bp" onclick="doBulkPlEli('${csId}')">Přidat</button><button class="bs" onclick="cDlg()">Zrušit</button>`);
+}
+function doBulkPlEli(csId){
+  const c=getCs(csId);if(!c)return;
+  const ids=getSelPlIds(csId);
+  const cis=document.getElementById('bulk-pl-eli-cis').value;
+  const rok=document.getElementById('bulk-pl-eli-rok').value;
+  if(!cis||!rok){toast('Vyplňte číslo a rok předpisu.','w');return;}
+  const iri=eliToOFN(rok,cis,'aktualni','');
+  ids.forEach(id=>{
+    const p=c.polozky.find(x=>x.id===id);if(!p)return;
+    if(!p.sus)p.sus=[];
+    if(!p.sus.includes(iri))p.sus.push(iri);
+  });
+  c.aktualizovano=td();saveL();cDlg();
+  toast('Ustanovení přidáno k '+ids.length+' položkám.');render();
+}
+
+function bulkPlDel(csId){
+  const ids=getSelPlIds(csId);if(!ids.length)return;
+  oDlg('Smazat vybrané položky',
+    `<p>Smazat <strong>${ids.length}</strong> vybraných položek?</p><p class="xs" style="color:var(--dg);margin-top:7px">Tato akce je nevratná.</p>`,
+    `<button class="bd" onclick="doBulkPlDel('${csId}')">Ano, smazat</button><button class="bs" onclick="cDlg()">Zrušit</button>`);
+}
+function doBulkPlDel(csId){
+  const c=getCs(csId);if(!c)return;
+  const ids=getSelPlIds(csId);
+  c.polozky=c.polozky.filter(p=>!ids.includes(p.id));
+  c.aktualizovano=td();saveL();cDlg();
+  toast('Smazáno '+ids.length+' položek.');render();
 }
 // ── INIT ──
 loadL();render();
